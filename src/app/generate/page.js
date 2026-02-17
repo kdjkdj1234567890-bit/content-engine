@@ -51,7 +51,7 @@ export default function GeneratePage() {
         setUsageCount(count);
     }, []);
 
-    const handleGenerate = async () => {
+    const handleGenerate = async (overrideDetails = null) => {
         if (!keyword) {
             setError("키워드를 입력해주세요");
             return;
@@ -65,20 +65,21 @@ export default function GeneratePage() {
 
         setLoading(true);
         setError("");
-        setResult(null);
 
         try {
+            const finalDetails = overrideDetails || {
+                brandVoice,
+                globalRules,
+                team: selectedTeam
+            };
+
             const res = await fetch("/api/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     keyword,
                     type: contentType,
-                    details: {
-                        brandVoice,  // Shared Brain
-                        globalRules, // Shared Brain
-                        team: selectedTeam // Agent Context
-                    }
+                    details: finalDetails
                 }),
             });
 
@@ -90,7 +91,6 @@ export default function GeneratePage() {
 
             setResult(data);
 
-            // Increment usage count
             const today = new Date().toISOString().split("T")[0];
             const newCount = usageCount + 1;
             setUsageCount(newCount);
@@ -103,11 +103,32 @@ export default function GeneratePage() {
         }
     };
 
-    // Update content type when team changes to first available type
     useEffect(() => {
         const firstType = TEAMS[selectedTeam].types[0].id;
         setContentType(firstType);
     }, [selectedTeam]);
+
+    // Handle Feedback (Self-Correction & Auto-Fix)
+    const addRule = (newRule) => {
+        if (!globalRules.includes(newRule)) {
+            const updatedRules = globalRules ? `${globalRules}\n- ${newRule}` : `- ${newRule}`;
+            setGlobalRules(updatedRules);
+
+            alert(`✅ 규칙 추가됨: "${newRule}"\n\nAI가 이 규칙을 적용해서 글을 다시 작성합니다! 🔄`);
+
+            setShowBrain(true);
+
+            // Trigger Regeneration Immediately
+            handleGenerate({
+                brandVoice,
+                globalRules: updatedRules,
+                team: selectedTeam
+            });
+        } else {
+            alert("이미 적용된 규칙입니다. 다시 생성합니다.");
+            handleGenerate();
+        }
+    };
 
     return (
         <div className={styles.container}>
@@ -124,7 +145,6 @@ export default function GeneratePage() {
             <main className={styles.main}>
                 <h1 className={styles.title}>AI 직원에게 업무 지시</h1>
 
-                {/* Shared Brain Section */}
                 <div className={styles.brainSection}>
                     <button
                         className={styles.brainToggle}
@@ -156,9 +176,7 @@ export default function GeneratePage() {
                 </div>
 
                 <div className={styles.grid}>
-                    {/* Left: Input Panel */}
                     <div className={styles.panel}>
-                        {/* Team Selection */}
                         <div className={styles.sectionTitle}>1. 담당 부서 선택</div>
                         <div className={styles.teamSelector}>
                             {Object.entries(TEAMS).map(([key, team]) => (
@@ -176,7 +194,6 @@ export default function GeneratePage() {
                             ))}
                         </div>
 
-                        {/* Content Type Selection (Dynamic based on team) */}
                         <div className={styles.sectionTitle} style={{ marginTop: "20px" }}>2. 작업 유형 선택</div>
                         <div className={styles.typeGrid}>
                             {TEAMS[selectedTeam].types.map((t) => (
@@ -202,7 +219,7 @@ export default function GeneratePage() {
                             />
                             <button
                                 className={styles.generateBtn}
-                                onClick={handleGenerate}
+                                onClick={() => handleGenerate()}
                                 disabled={loading}
                             >
                                 {loading ? "작업 중..." : "지시하기 ✨"}
@@ -212,7 +229,6 @@ export default function GeneratePage() {
                         {error && <div className={styles.error}>{error}</div>}
                     </div>
 
-                    {/* Right: Output Panel */}
                     <div className={styles.previewPanel}>
                         {!result ? (
                             <div className={styles.placeholder}>
@@ -239,7 +255,42 @@ export default function GeneratePage() {
                                     </button>
                                 </div>
 
-                                {/* Quality Score Analysis */}
+                                <div className={styles.feedbackSection}>
+                                    <div className={styles.feedbackTitle}>♻️ 피드백 반영 (규칙 자동 추가 + 즉시 수정)</div>
+                                    <div className={styles.feedbackButtons}>
+                                        <button
+                                            className={styles.feedBtn}
+                                            onClick={() => addRule("Use friendly tone and emojis.")}
+                                        >
+                                            😊 너무 딱딱해요
+                                        </button>
+                                        <button
+                                            className={styles.feedBtn}
+                                            onClick={() => addRule("Be concise and short.")}
+                                        >
+                                            ✂️ 너무 길어요
+                                        </button>
+                                        <button
+                                            className={styles.feedBtn}
+                                            onClick={() => addRule("Add more concrete examples.")}
+                                        >
+                                            💡 예시가 부족해요
+                                        </button>
+                                        <button
+                                            className={styles.feedBtn}
+                                            onClick={() => addRule("Focus on empathy and emotion.")}
+                                        >
+                                            💖 감동이 없어요
+                                        </button>
+                                        <button
+                                            className={styles.feedBtn}
+                                            onClick={() => addRule("Increase urgency and CTA strength.")}
+                                        >
+                                            💰 구매 유도가 약해요
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {result.quality && (
                                     <div className={styles.qualityAnalysis}>
                                         <div className={styles.qualityRow}>
@@ -255,7 +306,6 @@ export default function GeneratePage() {
                                             <span className={styles.qualityValue}>{result.seo?.score}점</span>
                                         </div>
 
-                                        {/* Improvement Suggestions */}
                                         {result.quality.improvements && result.quality.improvements.length > 0 && (
                                             <div className={styles.improvements}>
                                                 <div className={styles.impTitle}>💡 개선 제안</div>
